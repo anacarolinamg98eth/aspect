@@ -26,6 +26,7 @@
 #include <aspect/adiabatic_conditions/interface.h>
 
 
+
 #include <deal.II/base/signaling_nan.h>
 #include <deal.II/base/parameter_handler.h>
 #include <aspect/simulator_signals.h>
@@ -47,8 +48,15 @@ namespace aspect
                                                                 const double base_viscosity,
                                                                 const unsigned int composition_index,
                                                                 const unsigned int q,
-                                                                const ModifiedFlowLaws &modified_flow_laws) const
+                                                                const ModifiedFlowLaws &modified_flow_laws,
+                                                                double *fugacity_output) const
       {
+        // A signaling NaN makes accidental use of this optional diagnostic
+        // obvious when a prefactor scheme does not compute Peng-Robinson
+        // fugacity.
+        if (fugacity_output != nullptr)
+          *fugacity_output = numbers::signaling_nan<double>();
+
         double factored_viscosities = base_viscosity;
         switch (viscosity_prefactor_scheme)
           {
@@ -92,8 +100,181 @@ namespace aspect
               factored_viscosities = base_viscosity*std::pow(point_water_fugacity, r);
               break;
             }
+
+            case peng_robinson85_fugacity:
+            {
+              // Use the reference adiabatic pressure rather than the solved
+              // pressure, which can contain a dynamic component that is not
+              // part of the thermodynamic reference state used by this EOS.
+              const double adiabatic_pressure = this->get_adiabatic_conditions().pressure(in.position[q]);
+
+              // The parameter contains r/n, so the viscosity dependence is
+              // f^(-r/n). This scheme currently modifies dislocation creep
+              // only; the diffusion-creep multiplier is one.
+              const double viscosity_fugacity_exponent = modified_flow_laws == diffusion
+                                                         ?
+                                                         0
+                                                         :
+                                                         -fugacity_exponents[composition_index];
+
+              const double point_water_fugacity =
+                compute_fugacity(in.temperature[q], adiabatic_pressure);
+
+              // Apply the raw fugacity in Pa
+              // Consequently, creep-law prefactors must be
+              // calibrated for fugacity expressed in Pa.
+              factored_viscosities =
+                base_viscosity
+                * std::pow(point_water_fugacity, viscosity_fugacity_exponent);
+
+              // Return the already computed value to the caller when it is
+              // needed for the named visualization output.
+              if (fugacity_output != nullptr)
+                *fugacity_output = point_water_fugacity;
+
+              break;
+            }
+
           }
         return factored_viscosities;
+      }
+
+      template <int dim>
+      double
+      CompositionalViscosityPrefactors<dim>::compute_fugacity(
+        const double temperature, const double pressure) const
+      {
+        // Use short names below to keep the Peng-Robinson equations close to
+        // their conventional notation.
+        const double T_c = critical_temperature;
+        const double P_c = critical_pressure;
+        const double R = constants::gas_constant;
+
+        // Dimensionless constants in the original Peng-Robinson formulation.
+        const double a_coefficient = 0.45724;
+        const double b_coefficient = 0.07780;
+
+        AssertThrow(temperature > 0.0 && pressure >= 0.0,
+                    ExcMessage("Temperature must be positive and absolute "
+                               "pressure must be non-negative."));
+
+        // The zero-pressure limit is an ideal, infinitely dilute vapor.
+        if (pressure == 0.0)
+          return 0.0;
+
+        // Cap the EOS pressure at 2.5 GPa; the Peng-Robinson model is not
+        // calibrated for higher pressures.
+        const double capped_pressure = std::min(pressure, 2.5e9);
+
+        // With R in J/(mol K) and P_c in Pa, b is in m^3/mol and a is
+        // in Pa (m^3/mol)^2.
+        const double b = b_coefficient * R * T_c / P_c;
+        const double alpha = std::pow(1.0 + kappa
+                                      * (1.0 - std::sqrt(temperature/T_c)),
+                                      2.0);
+        const double a = a_coefficient * alpha * R*R*T_c*T_c/P_c;
+
+
+        // Form the dimensionless Peng-Robinson coefficients used in the
+        // compressibility-factor cubic.
+        const double A = a * capped_pressure / (R*R*temperature*temperature);
+        const double B = b * capped_pressure / (R*temperature);
+        const double a0 = (-1)*A*B + B*B + B*B*B;
+        const double a1 = A - 3*B*B - 2*B;
+        const double a2 = B - 1;
+
+        // Transform Z^3 + a2*Z^2 + a1*Z + a0 = 0 to the depressed
+        // cubic y^3 + p*y + q = 0 and calculate all real roots.
+        const double p =   a1 - a2*a2/3.0;
+        const double q = 2.0*a2*a2*a2/27.0 - a2*a1/3.0 + a0;
+        const double discriminant = q*q/4.0 + p*p*p/27.0;
+
+        std::array<double,3> roots = {{0.0, 0.0, 0.0}};
+        unsigned int n_roots = 0;
+
+        if (discriminant > 0.0)
+          {
+            roots[0] = std::cbrt(-q/2.0 + std::sqrt(discriminant))
+                       + std::cbrt(-q/2.0 - std::sqrt(discriminant))
+                       - a2/3.0;
+            n_roots = 1;
+          }
+        else
+          {
+            const double amplitude = 2.0*std::sqrt(std::max(0.0, -p/3.0));
+
+            if (amplitude == 0.0)
+              {
+                roots[0] = -a2/3.0;
+                n_roots = 1;
+              }
+            else
+              {
+                const double cosine_argument =
+                  std::clamp(3.0*q/(p*amplitude), -1.0, 1.0);
+                const double theta = std::acos(cosine_argument)/3.0;
+
+                for (unsigned int i=0; i<3; ++i)
+                  roots[i] = amplitude
+                             * std::cos(theta + 2.0*numbers::PI*i/3.0)
+                             - a2/3.0;
+                n_roots = 3;
+              }
+          }
+
+
+        // Retain physical roots and order them from liquid-like (small Z) to
+        // vapor-like (large Z).
+        std::vector<double> physical_roots;
+        for (unsigned int i=0; i<n_roots; ++i)
+          if (roots[i] > B)
+            physical_roots.push_back(roots[i]);
+
+        std::sort(physical_roots.begin(), physical_roots.end());
+        physical_roots.erase(std::unique(physical_roots.begin(),
+                                         physical_roots.end(),
+                                         [](const double left, const double right)
+        {
+          return std::abs(left-right)
+                 < 1e-12*std::max(1.0, std::abs(left));
+        }),
+        physical_roots.end());
+
+        AssertThrow(!physical_roots.empty(),
+                    ExcMessage("The Peng-Robinson equation did not produce "
+                               "a physical compressibility-factor root."));
+
+        const auto fugacity_for_root = [A, B, capped_pressure](const double Z)
+        {
+          const double sqrt_two = std::sqrt(2.0);
+          const double logarithm_argument =
+            (Z + (sqrt_two + 1.0)*B)
+            / (Z - (sqrt_two - 1.0)*B);
+
+          AssertThrow(Z > B && logarithm_argument > 0.0,
+                      ExcMessage("A compressibility-factor root is not valid "
+                                 "for calculating fugacity."));
+
+          const double ln_phi =
+            (Z - 1.0) - std::log(Z - B)
+            - A/(2.0*sqrt_two*B)*std::log(logarithm_argument);
+          return capped_pressure*std::exp(ln_phi);
+        };
+
+        // When more than one physical root exists, compare the liquid-like
+        // and vapor-like roots and retain the phase with the lower fugacity.
+        const double liquid_Z = physical_roots.front();
+        const double vapor_Z = physical_roots.back();
+        const double liquid_fugacity = fugacity_for_root(liquid_Z);
+        const double vapor_fugacity = fugacity_for_root(vapor_Z);
+        const double equilibrium_fugacity =
+          std::min(liquid_fugacity, vapor_fugacity);
+
+        AssertThrow(std::isfinite(equilibrium_fugacity),
+                    ExcMessage("The Peng-Robinson equation produced a "
+                               "non-finite fugacity."));
+
+        return equilibrium_fugacity;
       }
 
 
@@ -130,12 +311,50 @@ namespace aspect
                            "for dislocation creep, which typically is 3.5. Units: none.");
 
         prm.declare_entry ("Viscosity prefactor scheme", "none",
-                           Patterns::Selection("none|HK04 olivine hydration"),
+                           Patterns::Selection("none|HK04 olivine hydration|peng_robinson85_fugacity"),
                            "Select what type of viscosity multiplicative prefactor scheme to apply. "
-                           "Allowed entries are 'none', and 'HK04 olivine hydration'. HK04 olivine "
-                           "hydration calculates the viscosity change due to hydrogen incorporation "
-                           "into olivine following Hirth & Kohlstedt 2004 (10.1029/138GM06). none "
-                           "does not modify the viscosity. Units: none.");
+                           "Allowed entries are 'none', 'HK04 olivine hydration', and "
+                           "'peng_robinson85_fugacity'. 'HK04 olivine hydration' calculates "
+                           "the viscosity change due to hydrogen incorporation into olivine "
+                           "following Hirth & Kohlstedt 2004 (10.1029/138GM06). "
+                           "'peng_robinson85_fugacity' computes pure-water fugacity from "
+                           "temperature and adiabatic pressure with the Peng-Robinson equation "
+                           "of state and applies the resulting fugacity prefactor to dislocation "
+                           "creep. 'none' does not modify the viscosity. Units: none.");
+        prm.declare_entry ("Critical temperature", "647.3",
+                           Patterns::Double (0.0),
+                           "Critical temperature of the fluid used by the Peng-Robinson "
+                           "equation of state. This parameter is only used when "
+                           "'Viscosity prefactor scheme' is 'peng_robinson85_fugacity'. "
+                           "Units: K.");
+        prm.declare_entry ("Critical pressure", "22.12e6",
+                           Patterns::Double (0.0),
+                           "Critical pressure of the fluid used by the Peng-Robinson "
+                           "equation of state. This parameter is only used when "
+                           "'Viscosity prefactor scheme' is 'peng_robinson85_fugacity'. "
+                           "Units: Pa.");
+        prm.declare_entry ("Acentric factor", "0.344",
+                           Patterns::Double (),
+                           "Acentric factor of the fluid. The value is retained with the "
+                           "fluid parameters, while the current equation-of-state calculation "
+                           "uses the separately supplied 'Kappa' value in its temperature "
+                           "correction. This parameter is only read for the "
+                           "'peng_robinson85_fugacity' scheme. Units: none.");
+        prm.declare_entry ("Kappa", "0.873236",
+                           Patterns::Double (),
+                           "Peng-Robinson kappa coefficient in the temperature-dependent "
+                           "attraction parameter alpha. The default is the value corresponding "
+                           "to water with an acentric factor of 0.344. This parameter is only "
+                           "used by the 'peng_robinson85_fugacity' scheme. Units: none.");
+        prm.declare_entry ("Fugacity exponents", "0.0",
+                           Patterns::List(Patterns::Double(0.0)),
+                           "List of water-fugacity exponents for the background material and "
+                           "compositional fields. Entries must be r/n, where r is the fugacity "
+                           "exponent in the creep law and n is the dislocation-creep stress "
+                           "exponent. The viscosity is multiplied by f^(-r/n), using the raw "
+                           "Peng-Robinson fugacity f in Pa without normalization by a reference "
+                           "fugacity. This parameter is only used by the "
+                           "'peng_robinson85_fugacity' scheme. Units: none.");
       }
 
 
@@ -171,6 +390,36 @@ namespace aspect
                                                    options);
             minimum_mass_fraction_water_for_dry_creep = Utilities::MapParsing::parse_map_to_double_array (prm.get("Minimum mass fraction bound water content for fugacity"),
                                                         options);
+          }
+        if (prm.get ("Viscosity prefactor scheme") == "peng_robinson85_fugacity")
+          {
+            viscosity_prefactor_scheme = peng_robinson85_fugacity;
+
+            // Read the thermodynamic constants only when this scheme is
+            // selected. Other viscosity-prefactor schemes continue to use
+            // their existing parameters and defaults.
+            critical_temperature = prm.get_double ("Critical temperature");
+            critical_pressure = prm.get_double ("Critical pressure");
+            acentric_factor = prm.get_double ("Acentric factor");
+            kappa = prm.get_double ("Kappa");
+
+            // Accept either positional lists or keyed maps for the background
+            // material and chemical compositions, consistent with the other
+            // compositional rheology parameters in this class.
+            std::vector<std::string> compositional_field_names =
+              this->introspection().get_composition_names();
+            std::vector<std::string> chemical_field_names =
+              this->introspection().chemical_composition_field_names();
+
+            compositional_field_names.insert(compositional_field_names.begin(), "background");
+            chemical_field_names.insert(chemical_field_names.begin(), "background");
+
+            Utilities::MapParsing::Options options(chemical_field_names,
+                                                   "Fugacity exponents");
+            options.list_of_allowed_keys = compositional_field_names;
+            fugacity_exponents =
+              Utilities::MapParsing::parse_map_to_double_array(
+                prm.get("Fugacity exponents"), options);
           }
       }
     }

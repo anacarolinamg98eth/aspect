@@ -45,6 +45,7 @@ namespace aspect
            */
           CompositionalViscosityPrefactors();
 
+
           /**
            * Declare the parameters this function takes through input files.
            */
@@ -67,14 +68,34 @@ namespace aspect
           } modified_flow_laws;
 
           /**
-           * Compute the viscosity.
+           * Apply the selected compositional viscosity prefactor to
+           * @p base_viscosity at evaluation point @p q for composition
+           * @p composition_index. The @p modified_flow_laws argument identifies
+           * whether the supplied viscosity was calculated with diffusion or
+           * dislocation creep.
+           *
+           * If @p fugacity_output is not a null pointer, the Peng-Robinson
+           * scheme stores the computed water fugacity in Pa at that location.
+           * This optional output is used to expose fugacity as a named material
+           * output without recomputing the equation of state.
            */
           double
           compute_viscosity (const MaterialModel::MaterialModelInputs<dim> &in,
                              const double base_viscosity,
                              const unsigned int composition_index,
                              const unsigned int q,
-                             const ModifiedFlowLaws &modified_flow_laws) const;
+                             const ModifiedFlowLaws &modified_flow_laws,
+                             double *fugacity_output = nullptr) const;
+
+          /**
+           * Compute pure-water fugacity from the Peng-Robinson equation of
+           * state at @p temperature in K and absolute @p pressure in Pa.
+           * The returned fugacity is in Pa. Pressures above 2.5 GPa are
+           * evaluated at 2.5 GPa because this implementation is not intended
+           * to extrapolate the equation of state beyond that pressure.
+           */
+          double
+          compute_fugacity (const double temperature, const double pressure) const;
 
         private:
           /**
@@ -88,6 +109,10 @@ namespace aspect
            * water in the solid, which is used to compute an atomic ratio of H/Si ppm
            * assuming 90 mol% forsterite and 10 mol% fayalite, and finally calculates
            * a water fugacity.
+           * peng_robinson85_fugacity: calculate the viscosity change due to
+           * pure-water fugacity using the Peng-Robinson equation of state, as
+           * described by Robinson, Peng, & Chung 1985
+           * (10.1016/0378-3812(85)87035-7).
            * The prefactor for a given compositional field is multiplied with a
            * base_viscosity value provided by the material model, which is then returned
            * to the material model.
@@ -96,6 +121,7 @@ namespace aspect
           {
             none,
             hk04_olivine_hydration,
+            peng_robinson85_fugacity,
           };
           /**
            *  This variable is read from the parameter file through a parameter called 'Viscosity prefactor scheme'.
@@ -116,6 +142,15 @@ namespace aspect
            */
           std::vector<double> minimum_mass_fraction_water_for_dry_creep;
 
+          /**
+           * Water fugacity exponents used by the Peng-Robinson fugacity
+           * viscosity prefactor scheme. Entries contain r/n, where r is the
+           * fugacity exponent in the creep law and n is the stress exponent.
+           * The viscosity multiplier is therefore f^(-r/n), where f is the
+           * raw fugacity in Pa returned by compute_fugacity().
+           */
+          std::vector<double> fugacity_exponents;
+
           // From Hirth & Kohlstedt 2004, equation 6
           const double A_H2O = 2.6e-5; // 1/Pa
           const double activation_energy_H2O = 40e3; // J/mol/K
@@ -126,7 +161,32 @@ namespace aspect
           // in olivine.
           const double molar_mass_olivine = 0.1470027; // kg/mol
           const double molar_mass_H2O = 0.01801528; // kg/mol
+
+          /**
+           * Critical temperature of the fluid in K.
+           */
+          double critical_temperature;
+
+          /**
+           * Critical pressure of the fluid in Pa.
+           */
+          double critical_pressure;
+
+          /**
+           * Acentric factor of the fluid. It is retained as fluid metadata;
+           * the temperature correction currently uses the separately supplied
+           * Peng-Robinson kappa value.
+           */
+          double acentric_factor;
+
+          /**
+           * Peng-Robinson kappa coefficient used in the temperature-dependent
+           * attraction term.
+           */
+          double kappa;
+
       };
+
     }
   }
 }

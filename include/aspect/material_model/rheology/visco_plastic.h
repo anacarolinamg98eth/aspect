@@ -85,8 +85,10 @@ namespace aspect
     };
 
     /**
-    * Additional output fields for diffusion and dislocation viscosities.
-    */
+     * Additional output fields for diffusion and dislocation viscosities and
+     * for water fugacity when the Peng-Robinson viscosity-prefactor scheme is
+     * active.
+     */
     template <int dim>
     class ViscosityAdditionalOutputs : public NamedAdditionalMaterialOutputs<dim>
     {
@@ -98,7 +100,8 @@ namespace aspect
         enum class Property
         {
           diffusion_viscosity,
-          dislocation_viscosity
+          dislocation_viscosity,
+          water_fugacity
         };
 
         /**
@@ -133,6 +136,13 @@ namespace aspect
          * i.e., viscous flow law is either dislocation or composite.
          */
         std::vector<double> dislocation_viscosities;
+
+        /**
+         * Composition-averaged water fugacity in Pa at each evaluation point.
+         * Values are signaling NaNs when the selected prefactor scheme does
+         * not compute Peng-Robinson fugacity.
+         */
+        std::vector<double> water_fugacities;
 
     };
 
@@ -179,6 +189,13 @@ namespace aspect
        * Dislocation viscosities for each composition.
        */
       std::vector<double> dislocation_viscosities;
+
+      /**
+       * Water fugacity in Pa for each composition. These temporary values are
+       * averaged into ViscosityAdditionalOutputs after all compositional
+       * viscosities have been evaluated.
+       */
+      std::vector<double> water_fugacities;
     };
 
     namespace Rheology
