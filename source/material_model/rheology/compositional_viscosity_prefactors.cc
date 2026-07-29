@@ -26,7 +26,6 @@
 #include <aspect/adiabatic_conditions/interface.h>
 
 
-
 #include <deal.II/base/signaling_nan.h>
 #include <deal.II/base/parameter_handler.h>
 #include <aspect/simulator_signals.h>
@@ -48,14 +47,8 @@ namespace aspect
                                                                 const double base_viscosity,
                                                                 const unsigned int composition_index,
                                                                 const unsigned int q,
-                                                                const ModifiedFlowLaws &modified_flow_laws,
-                                                                double *fugacity_output) const
+                                                                const ModifiedFlowLaws &modified_flow_laws) const
       {
-        // A signaling NaN makes accidental use of this optional diagnostic
-        // obvious when a prefactor scheme does not compute Peng-Robinson
-        // fugacity.
-        if (fugacity_output != nullptr)
-          *fugacity_output = numbers::signaling_nan<double>();
 
         double factored_viscosities = base_viscosity;
         switch (viscosity_prefactor_scheme)
@@ -108,29 +101,23 @@ namespace aspect
               // part of the thermodynamic reference state used by this EOS.
               const double adiabatic_pressure = this->get_adiabatic_conditions().pressure(in.position[q]);
 
-              // The parameter contains r/n, so the viscosity dependence is
-              // f^(-r/n). This scheme currently modifies dislocation creep
-              // only; the diffusion-creep multiplier is one.
+              // The parameters contain r/n, so the viscosity dependence is
+              // f^(-r/n).
               const double viscosity_fugacity_exponent = modified_flow_laws == diffusion
                                                          ?
-                                                         0
+                                                         -diffusion_water_fugacity_exponents[composition_index]
                                                          :
-                                                         -fugacity_exponents[composition_index];
+                                                         -dislocation_water_fugacity_exponents[composition_index];
 
               const double point_water_fugacity =
                 compute_fugacity(in.temperature[q], adiabatic_pressure);
 
-              // Apply the raw fugacity in Pa
-              // Consequently, creep-law prefactors must be
+              // Apply the raw fugacity in Pa without reference-fugacity
+              // normalization. Consequently, creep-law prefactors must be
               // calibrated for fugacity expressed in Pa.
               factored_viscosities =
                 base_viscosity
                 * std::pow(point_water_fugacity, viscosity_fugacity_exponent);
-
-              // Return the already computed value to the caller when it is
-              // needed for the named visualization output.
-              if (fugacity_output != nullptr)
-                *fugacity_output = point_water_fugacity;
 
               break;
             }
@@ -140,10 +127,24 @@ namespace aspect
       }
 
       template <int dim>
+      bool
+      CompositionalViscosityPrefactors<dim>::uses_peng_robinson_fugacity () const
+      {
+        return viscosity_prefactor_scheme == peng_robinson85_fugacity;
+      }
+
+
+
+      template <int dim>
       double
       CompositionalViscosityPrefactors<dim>::compute_fugacity(
         const double temperature, const double pressure) const
       {
+        AssertThrow(uses_peng_robinson_fugacity(),
+                    ExcMessage("Water fugacity can only be evaluated when the "
+                               "viscosity prefactor scheme is "
+                               "'peng_robinson85_fugacity'."));
+
         // Use short names below to keep the Peng-Robinson equations close to
         // their conventional notation.
         const double T_c = critical_temperature;
@@ -296,7 +297,8 @@ namespace aspect
                            "background material and compositional fields, for a total of N+1 "
                            "where N is the number of all compositional fields or only those "
                            "corresponding to chemical compositions. This is only applied when using the "
-                           "Viscosity prefactor scheme 'HK04 olivine hydration'. Note, the water fugacity exponent "
+                           "Viscosity prefactor scheme 'HK04 olivine hydration' or "
+                           "'peng_robinson85_fugacity'. Note, the water fugacity exponent "
                            "required by ASPECT for diffusion creep is r/n, where n is the stress exponent "
                            "for diffusion creep, which typically is 1. Units: none.");
 
@@ -306,7 +308,8 @@ namespace aspect
                            "background material and compositional fields, for a total of N+1 "
                            "where N is the number of all compositional fields or only those "
                            "corresponding to chemical compositions. This is only applied when using the "
-                           "Viscosity prefactor scheme 'HK04 olivine hydration'. Note, the water fugacity exponent "
+                           "Viscosity prefactor scheme 'HK04 olivine hydration' or "
+                           "'peng_robinson85_fugacity'. Note, the water fugacity exponent "
                            "required by ASPECT for dislocation creep is r/n, where n is the stress exponent "
                            "for dislocation creep, which typically is 3.5. Units: none.");
 
@@ -346,15 +349,6 @@ namespace aspect
                            "attraction parameter alpha. The default is the value corresponding "
                            "to water with an acentric factor of 0.344. This parameter is only "
                            "used by the 'peng_robinson85_fugacity' scheme. Units: none.");
-        prm.declare_entry ("Fugacity exponents", "0.0",
-                           Patterns::List(Patterns::Double(0.0)),
-                           "List of water-fugacity exponents for the background material and "
-                           "compositional fields. Entries must be r/n, where r is the fugacity "
-                           "exponent in the creep law and n is the dislocation-creep stress "
-                           "exponent. The viscosity is multiplied by f^(-r/n), using the raw "
-                           "Peng-Robinson fugacity f in Pa without normalization by a reference "
-                           "fugacity. This parameter is only used by the "
-                           "'peng_robinson85_fugacity' scheme. Units: none.");
       }
 
 
@@ -381,13 +375,8 @@ namespace aspect
             compositional_field_names.insert(compositional_field_names.begin(), "background");
             chemical_field_names.insert(chemical_field_names.begin(),"background");
 
-            Utilities::MapParsing::Options options(chemical_field_names, "Water fugacity exponents for diffusion creep");
-
+            Utilities::MapParsing::Options options(chemical_field_names, "Minimum mass fraction bound water content for fugacity");
             options.list_of_allowed_keys = compositional_field_names;
-            diffusion_water_fugacity_exponents = Utilities::MapParsing::parse_map_to_double_array (prm.get("Water fugacity exponents for diffusion creep"),
-                                                 options);
-            dislocation_water_fugacity_exponents = Utilities::MapParsing::parse_map_to_double_array (prm.get("Water fugacity exponents for dislocation creep"),
-                                                   options);
             minimum_mass_fraction_water_for_dry_creep = Utilities::MapParsing::parse_map_to_double_array (prm.get("Minimum mass fraction bound water content for fugacity"),
                                                         options);
           }
@@ -403,9 +392,11 @@ namespace aspect
             acentric_factor = prm.get_double ("Acentric factor");
             kappa = prm.get_double ("Kappa");
 
-            // Accept either positional lists or keyed maps for the background
-            // material and chemical compositions, consistent with the other
-            // compositional rheology parameters in this class.
+          }
+
+        if (viscosity_prefactor_scheme == hk04_olivine_hydration
+            || viscosity_prefactor_scheme == peng_robinson85_fugacity)
+          {
             std::vector<std::string> compositional_field_names =
               this->introspection().get_composition_names();
             std::vector<std::string> chemical_field_names =
@@ -414,12 +405,18 @@ namespace aspect
             compositional_field_names.insert(compositional_field_names.begin(), "background");
             chemical_field_names.insert(chemical_field_names.begin(), "background");
 
-            Utilities::MapParsing::Options options(chemical_field_names,
-                                                   "Fugacity exponents");
+            Utilities::MapParsing::Options options(
+              chemical_field_names,
+              "Water fugacity exponents for diffusion creep");
             options.list_of_allowed_keys = compositional_field_names;
-            fugacity_exponents =
+            diffusion_water_fugacity_exponents =
               Utilities::MapParsing::parse_map_to_double_array(
-                prm.get("Fugacity exponents"), options);
+                prm.get("Water fugacity exponents for diffusion creep"), options);
+
+            options.property_name = "Water fugacity exponents for dislocation creep";
+            dislocation_water_fugacity_exponents =
+              Utilities::MapParsing::parse_map_to_double_array(
+                prm.get("Water fugacity exponents for dislocation creep"), options);
           }
       }
     }

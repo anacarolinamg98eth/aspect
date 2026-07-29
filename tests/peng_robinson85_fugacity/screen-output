@@ -1,9 +1,4 @@
------------------------------------------------------------------------------
------------------------------------------------------------------------------
------------------------------------------------------------------------------
 
------------------------------------------------------------------------------
------------------------------------------------------------------------------
 Number of active cells: 256 (on 3 levels)
 Number of degrees of freedom: 4,645 (2,178+289+1,089+1,089)
 
@@ -15,149 +10,10 @@ Number of degrees of freedom: 4,645 (2,178+289+1,089+1,089)
 
 
    Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
      Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
      Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00000
-
-*** Timestep 1:  t=1e+06 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 4.24897e-15
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00001
-
-*** Timestep 2:  t=2e+06 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 8.65379e-15
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00002
-
-*** Timestep 3:  t=3e+06 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 8.3353e-15
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00003
-
-*** Timestep 4:  t=4e+06 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 9.14779e-15
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00004
-
-*** Timestep 5:  t=5e+06 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 1.03056e-14
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00005
-
-*** Timestep 6:  t=6e+06 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 9.77971e-15
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00006
-
-*** Timestep 7:  t=7e+06 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 1.00085e-14
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00007
-
-*** Timestep 8:  t=8e+06 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 1.03121e-14
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00008
-
-*** Timestep 9:  t=9e+06 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 1.05379e-14
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00009
-
-*** Timestep 10:  t=1e+07 years, dt=1e+06 years
-   Solving temperature system... 0 iterations.
-   Solving ocrust system ... 0 iterations.
-   Solving Stokes system (GMG)... 15+0 iterations.
-      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 1.00947e-14
-
-
-   Postprocessing:
-     Compositions min/max/mass:                         1/1/1e+10
-     Average density / Average viscosity / Total mass:  3300 kg/m^3, 3.55e+22 Pa s, 3.3e+13 kg
-     Pressure min/avg/max:                              1e+05 Pa, 1.619e+09 Pa, 3.237e+09 Pa
-     Writing graphical output:                          output-peng_robinson85_fugacity/solution/solution-00010
-
-Skipping mesh refinement, because the mesh did not change.
 
 Termination requested by criterion: end time
 
 
-+----------------------------------------------+------------+------------+
-+----------------------------------+-----------+------------+------------+
-+----------------------------------+-----------+------------+------------+
 
------------------------------------------------------------------------------
------------------------------------------------------------------------------

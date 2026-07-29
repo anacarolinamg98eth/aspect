@@ -279,6 +279,7 @@ namespace aspect
             {
               rheology->fill_plastic_outputs(i, volume_fractions, plastic_yielding, in, out, isostrain_viscosities);
               rheology->fill_viscosity_outputs(i, volume_fractions, out, isostrain_viscosities);
+              rheology->fill_fugacity_outputs(in, i, out);
             }
 
           if (this->get_parameters().enable_elasticity)
@@ -482,6 +483,7 @@ namespace aspect
     {
       rheology->create_plastic_outputs(out);
       rheology->create_viscosity_outputs(out);
+      rheology->create_fugacity_outputs(out);
 
       if (this->get_parameters().enable_elasticity)
         rheology->elastic_rheology.create_elastic_additional_outputs(out);

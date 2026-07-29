@@ -85,9 +85,7 @@ namespace aspect
     };
 
     /**
-     * Additional output fields for diffusion and dislocation viscosities and
-     * for water fugacity when the Peng-Robinson viscosity-prefactor scheme is
-     * active.
+     * Additional output fields for diffusion and dislocation viscosities.
      */
     template <int dim>
     class ViscosityAdditionalOutputs : public NamedAdditionalMaterialOutputs<dim>
@@ -100,8 +98,7 @@ namespace aspect
         enum class Property
         {
           diffusion_viscosity,
-          dislocation_viscosity,
-          water_fugacity
+          dislocation_viscosity
         };
 
         /**
@@ -136,13 +133,6 @@ namespace aspect
          * i.e., viscous flow law is either dislocation or composite.
          */
         std::vector<double> dislocation_viscosities;
-
-        /**
-         * Composition-averaged water fugacity in Pa at each evaluation point.
-         * Values are signaling NaNs when the selected prefactor scheme does
-         * not compute Peng-Robinson fugacity.
-         */
-        std::vector<double> water_fugacities;
 
     };
 
@@ -190,12 +180,6 @@ namespace aspect
        */
       std::vector<double> dislocation_viscosities;
 
-      /**
-       * Water fugacity in Pa for each composition. These temporary values are
-       * averaged into ViscosityAdditionalOutputs after all compositional
-       * viscosities have been evaluated.
-       */
-      std::vector<double> water_fugacities;
     };
 
     namespace Rheology
@@ -295,6 +279,13 @@ namespace aspect
           create_viscosity_outputs(MaterialModel::MaterialModelOutputs<dim> &out) const;
 
           /**
+           * Create the Peng-Robinson water-fugacity additional output when
+           * the corresponding viscosity-prefactor scheme is selected.
+           */
+          void
+          create_fugacity_outputs(MaterialModel::MaterialModelOutputs<dim> &out) const;
+
+          /**
            * Fill additional outputs for diffusion and dislocation viscosities,
            * if viscosity additional output object is created.
            */
@@ -302,6 +293,13 @@ namespace aspect
                                       const std::vector<double> &volume_fractions,
                                       MaterialModel::MaterialModelOutputs<dim> &out,
                                       const IsostrainViscosities &isostrain_viscosities) const;
+
+          /**
+           * Fill the Peng-Robinson water-fugacity additional output.
+           */
+          void fill_fugacity_outputs(const MaterialModel::MaterialModelInputs<dim> &in,
+                                     const unsigned int point_index,
+                                     MaterialModel::MaterialModelOutputs<dim> &out) const;
 
           /**
            * Minimum strain rate used to stabilize the strain rate dependent rheology.

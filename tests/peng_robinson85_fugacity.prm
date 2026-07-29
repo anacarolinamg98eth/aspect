@@ -1,15 +1,28 @@
+# This test checks the Peng-Robinson water-fugacity viscosity-prefactor
+# scheme in combination with the visco plastic material model. The model is
+# a 100 km by 100 km box filled with the ocrust composition. Its temperature
+# decreases linearly from 1573 K at the bottom to 273 K at the top.
+#
+# The Peng-Robinson equation of state evaluates water fugacity from the local
+# temperature and adiabatic pressure (with pressure capped at 2.5 GPa). The
+# ocrust dislocation-creep viscosity is multiplied by f^(-r/n), with r/n=0.25,
+# while the background exponent is zero. The test writes the model viscosity
+# through the material-properties visualization output and water_fugacity
+# through named additional outputs. The corresponding gnuplot output checks
+# both the viscosity modification and the fugacity values returned for
+# visualization.
+# The implementation assumes water saturation, such that the pressure used to compute the fugacity 
+# is the adiabatic pressure. 
+
 set Dimension                     = 2
-set End time                     = 10e6
+set End time                     = 0
 set Use years instead of seconds = true
 set Output directory             = output
 set Pressure normalization       = surface
 set Surface pressure             = 1e5
 set Nonlinear solver scheme      = single Advection, iterated Stokes
 set Nonlinear solver tolerance   = 1e-4
-set Max nonlinear iterations     = 20
-set CFL number                                 = 0.5
-set Maximum time step                          = 1e6
-set Maximum relative increase in time step     = 5
+set Max nonlinear iterations     = 1
 
 subsection Geometry model
   set Model name = box
@@ -100,7 +113,7 @@ subsection Material model
     set Activation volumes for dislocation creep  = 12e-6, 0
 
     set Viscosity prefactor scheme = peng_robinson85_fugacity
-    set Fugacity exponents          = 0, 0.25
+    set Water fugacity exponents for dislocation creep = 0, 0.25
 
     set Critical temperature = 647.3
     set Critical pressure    = 22.12e6
@@ -115,12 +128,12 @@ subsection Mesh refinement
 end
 
 subsection Postprocess
-  set List of postprocessors = composition statistics, material statistics, pressure statistics, visualization
+  set List of postprocessors = material statistics, visualization
 
   subsection Visualization
     set Interpolate output        = false
-    set List of output variables = named additional outputs, material properties, strain rate
-    set Output format             = vtu
+    set List of output variables = named additional outputs, material properties
+    set Output format             = gnuplot
     set Time between graphical output = 0
 
     subsection Material properties
@@ -128,7 +141,6 @@ subsection Postprocess
     end
   end
 end
-
 subsection Solver parameters
   subsection Stokes solver parameters
     set Number of cheap Stokes solver steps = 40

@@ -19,6 +19,7 @@
 */
 
 #include <aspect/material_model/rheology/visco_plastic.h>
+#include <aspect/material_model/additional_outputs/peng_robinson_fugacity85.h>
 #include <aspect/material_model/utilities.h>
 #include <aspect/utilities.h>
 #include <aspect/newton.h>
@@ -104,11 +105,6 @@ namespace aspect
                 names.emplace_back("dislocation_viscosity");
                 break;
 
-              case ViscosityAdditionalOutputs<dim>::Property::water_fugacity:
-                // This name is exposed by the "named additional outputs"
-                // visualization postprocessor.
-                names.emplace_back("water_fugacity");
-                break;
             }
 
         return names;
@@ -123,8 +119,7 @@ namespace aspect
       :NamedAdditionalMaterialOutputs<dim>(make_viscosity_additional_outputs_names<dim>(active_properties)),
        active_properties(active_properties),
        diffusion_viscosities(n_points, std::numeric_limits<double>::max()),
-       dislocation_viscosities(n_points, std::numeric_limits<double>::max()),
-       water_fugacities(n_points, numbers::signaling_nan<double>())
+       dislocation_viscosities(n_points, std::numeric_limits<double>::max())
     {}
 
 
@@ -143,8 +138,6 @@ namespace aspect
           case Property::dislocation_viscosity:
             return dislocation_viscosities;
 
-          case Property::water_fugacity:
-            return water_fugacities;
         }
 
       DEAL_II_ASSERT_UNREACHABLE();
@@ -182,11 +175,6 @@ namespace aspect
         output_parameters.dilation_rhs_terms.resize(volume_fractions.size(), numbers::signaling_nan<double>());
         output_parameters.diffusion_viscosities.resize(volume_fractions.size(), std::numeric_limits<double>::max());
         output_parameters.dislocation_viscosities.resize(volume_fractions.size(), std::numeric_limits<double>::max());
-        // Fugacity is produced by the compositional viscosity prefactor, so
-        // keep one temporary value per composition until the compositions are
-        // averaged for the material-model output.
-        output_parameters.water_fugacities.resize(volume_fractions.size(), numbers::signaling_nan<double>());
-
         // Assemble current and old stress tensor if elastic behavior is enabled
         SymmetricTensor<2, dim> stress_0_advected = numbers::signaling_nan<SymmetricTensor<2, dim>>();
         SymmetricTensor<2, dim> stress_old = numbers::signaling_nan<SymmetricTensor<2, dim>>();
@@ -301,12 +289,8 @@ namespace aspect
                   }
                   case dislocation:
                   {
-                    // Pass a pointer to the per-composition output slot so the
-                    // prefactor calculation can return its already computed
-                    // fugacity without evaluating the EOS a second time.
                     non_yielding_viscosity = compositional_viscosity_prefactors.compute_viscosity(in, viscosity_dislocation, j, i,
-                                                                                                  CompositionalViscosityPrefactors<dim>::ModifiedFlowLaws::dislocation,
-                                                                                                  &output_parameters.water_fugacities[j]);
+                                                                                                  CompositionalViscosityPrefactors<dim>::ModifiedFlowLaws::dislocation);
                     output_parameters.dislocation_viscosities[j] = non_yielding_viscosity;
                     break;
                   }
@@ -1098,16 +1082,24 @@ namespace aspect
               active_properties.emplace_back(
                 ViscosityAdditionalOutputs<dim>::Property::dislocation_viscosity);
 
-            // Register water fugacity as a named material output. It is
-            // populated for the Peng-Robinson dislocation-creep scheme.
-            active_properties.emplace_back(
-              ViscosityAdditionalOutputs<dim>::Property::water_fugacity);
-
             out.additional_outputs.push_back(
               std::make_unique<ViscosityAdditionalOutputs<dim>>(
                 n_points,
                 active_properties));
           }
+      }
+
+
+
+      template <int dim>
+      void
+      Rheology::ViscoPlastic<dim>::create_fugacity_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
+      {
+        if (compositional_viscosity_prefactors.uses_peng_robinson_fugacity()
+            && out.template has_additional_output_object<PengRobinsonFugacity<dim>>() == false)
+          out.additional_outputs.push_back(
+            std::make_unique<PengRobinsonFugacity<dim>>(
+              out.n_evaluation_points()));
       }
 
 
@@ -1135,14 +1127,28 @@ namespace aspect
                   isostrain_viscosities.diffusion_viscosities,
                   viscosity_averaging);
 
-            // Fugacity is an intensive thermodynamic quantity, so combine
-            // compositional values with the arithmetic volume-fraction
-            // average rather than the selected viscosity averaging scheme.
-            viscosity_out->water_fugacities[i]
-              = MaterialUtilities::average_value(
-                  volume_fractions,
-                  isostrain_viscosities.water_fugacities,
-                  MaterialUtilities::arithmetic);
+          }
+      }
+
+
+
+      template <int dim>
+      void
+      Rheology::ViscoPlastic<dim>::fill_fugacity_outputs(
+        const MaterialModel::MaterialModelInputs<dim> &in,
+        const unsigned int i,
+        MaterialModel::MaterialModelOutputs<dim> &out) const
+      {
+        if (const std::shared_ptr<PengRobinsonFugacity<dim>> fugacity_out =
+              out.template get_additional_output_object<PengRobinsonFugacity<dim>>())
+          {
+            const double adiabatic_pressure =
+              this->get_adiabatic_conditions().pressure(in.position[i]);
+
+            fugacity_out->water_fugacities[i] =
+              compositional_viscosity_prefactors.compute_fugacity(
+                in.temperature[i],
+                adiabatic_pressure);
           }
       }
     }

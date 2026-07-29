@@ -73,19 +73,13 @@ namespace aspect
            * @p composition_index. The @p modified_flow_laws argument identifies
            * whether the supplied viscosity was calculated with diffusion or
            * dislocation creep.
-           *
-           * If @p fugacity_output is not a null pointer, the Peng-Robinson
-           * scheme stores the computed water fugacity in Pa at that location.
-           * This optional output is used to expose fugacity as a named material
-           * output without recomputing the equation of state.
            */
           double
           compute_viscosity (const MaterialModel::MaterialModelInputs<dim> &in,
                              const double base_viscosity,
                              const unsigned int composition_index,
                              const unsigned int q,
-                             const ModifiedFlowLaws &modified_flow_laws,
-                             double *fugacity_output = nullptr) const;
+                             const ModifiedFlowLaws &modified_flow_laws) const;
 
           /**
            * Compute pure-water fugacity from the Peng-Robinson equation of
@@ -96,6 +90,13 @@ namespace aspect
            */
           double
           compute_fugacity (const double temperature, const double pressure) const;
+
+          /**
+           * Return whether the selected viscosity prefactor scheme computes
+           * fugacity with the Peng-Robinson equation of state.
+           */
+          bool
+          uses_peng_robinson_fugacity () const;
 
         private:
           /**
@@ -112,7 +113,8 @@ namespace aspect
            * peng_robinson85_fugacity: calculate the viscosity change due to
            * pure-water fugacity using the Peng-Robinson equation of state, as
            * described by Robinson, Peng, & Chung 1985
-           * (10.1016/0378-3812(85)87035-7).
+           * (10.1016/0378-3812(85)87035-7). The current implementation uses the adiabatic pressure 
+           * under the assumption that the the materials are water saturated.
            * The prefactor for a given compositional field is multiplied with a
            * base_viscosity value provided by the material model, which is then returned
            * to the material model.
@@ -141,15 +143,6 @@ namespace aspect
            *  This variable is read from the parameter file through a parameter called 'Minimum mass fraction bound water content for fugacity'.
            */
           std::vector<double> minimum_mass_fraction_water_for_dry_creep;
-
-          /**
-           * Water fugacity exponents used by the Peng-Robinson fugacity
-           * viscosity prefactor scheme. Entries contain r/n, where r is the
-           * fugacity exponent in the creep law and n is the stress exponent.
-           * The viscosity multiplier is therefore f^(-r/n), where f is the
-           * raw fugacity in Pa returned by compute_fugacity().
-           */
-          std::vector<double> fugacity_exponents;
 
           // From Hirth & Kohlstedt 2004, equation 6
           const double A_H2O = 2.6e-5; // 1/Pa
@@ -184,7 +177,6 @@ namespace aspect
            * attraction term.
            */
           double kappa;
-
       };
 
     }
