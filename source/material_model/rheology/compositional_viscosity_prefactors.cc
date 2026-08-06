@@ -21,11 +21,12 @@
 
 #include <aspect/material_model/rheology/compositional_viscosity_prefactors.h>
 #include <aspect/material_model/additional_outputs/peng_robinson_fugacity76.h>
+#include <aspect/material_model/additional_outputs/gerya_water_fugacity.h>
 #include <aspect/utilities.h>
 #include <aspect/global.h>
 #include <aspect/geometry_model/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
-
+#include <aspect/structured_data.h>
 
 #include <deal.II/base/signaling_nan.h>
 #include <deal.II/base/parameter_handler.h>
@@ -125,6 +126,28 @@ namespace aspect
               break;
             }
 
+            case water_fugacity_gerya:
+            {
+              const double pressure_for_fugacity =
+                this->get_adiabatic_conditions().pressure(in.position[q]);
+
+              const double point_water_fugacity =
+                compute_tabulated_fugacity(in.temperature[q],
+                                           pressure_for_fugacity);
+
+              const double viscosity_fugacity_exponent =
+                modified_flow_laws == diffusion
+                ? -diffusion_water_fugacity_exponents[composition_index]
+                : -dislocation_water_fugacity_exponents[composition_index];
+
+              factored_viscosities =
+                base_viscosity
+                * std::pow(point_water_fugacity,
+                          viscosity_fugacity_exponent);
+
+              break;
+            }
+
             case interface_weakening:
             {
               const unsigned int comp_field_A_idx = this->introspection().compositional_index_for_name(weakening_field_names[0]);
@@ -144,13 +167,84 @@ namespace aspect
       }
 
       template <int dim>
+      void
+      CompositionalViscosityPrefactors<dim>::load_water_fugacity_table ()
+      {
+        if (viscosity_prefactor_scheme == water_fugacity_gerya)
+          {
+            const std::string full_filename =
+              fugacity_table_data_directory
+              + fugacity_table_file_name;
+
+            water_fugacity_lookup =
+              std::make_unique<Utilities::StructuredDataLookup<2>>(
+                /* n_components = */ 1,
+                /* scale_factor = */ 1.0);
+
+            water_fugacity_lookup->load_file(
+              full_filename,
+              this->get_mpi_communicator());
+          }
+      }
+
+      template <int dim>
+      double
+      CompositionalViscosityPrefactors<dim>::
+      compute_tabulated_fugacity(const double temperature,
+                                const double pressure) const
+      {
+        AssertThrow(
+          viscosity_prefactor_scheme == water_fugacity_gerya,
+          ExcInternalError());
+
+        AssertThrow(
+          water_fugacity_lookup != nullptr,
+          ExcMessage(
+            "The Gerya water-fugacity table has not been initialized."));
+
+        AssertThrow(
+          std::isfinite(temperature) && temperature > 0.0,
+          ExcMessage(
+            "Temperature for the Gerya fugacity lookup must "
+            "be positive and finite."));
+
+        AssertThrow(
+          std::isfinite(pressure) && pressure >= 0.0,
+          ExcMessage(
+            "Pressure for the Gerya fugacity lookup must "
+            "be non-negative and finite."));
+
+        const Point<2> table_position(temperature, pressure);
+
+        const double fugacity =
+          water_fugacity_lookup->get_data(
+            table_position,
+            /* component = */ 0,
+            /* crash_if_not_in_range = */ true);
+
+        AssertThrow(
+          std::isfinite(fugacity) && fugacity > 0.0,
+          ExcMessage(
+            "The fugacity interpolated from the Gerya table "
+            "must be positive and finite."));
+
+        return fugacity;
+      }
+
+      template <int dim>
       bool
       CompositionalViscosityPrefactors<dim>::uses_peng_robinson_fugacity () const
       {
         return viscosity_prefactor_scheme == peng_robinson76_fugacity;
       }
 
-
+      template <int dim>
+      bool
+      CompositionalViscosityPrefactors<dim>::
+      uses_gerya_water_fugacity () const
+      {
+        return viscosity_prefactor_scheme == water_fugacity_gerya;
+      }
 
       template <int dim>
       void
@@ -161,6 +255,12 @@ namespace aspect
             && out.template has_additional_output_object<PengRobinsonFugacity<dim>>() == false)
           out.additional_outputs.push_back(
             std::make_unique<PengRobinsonFugacity<dim>>(
+              out.n_evaluation_points()));
+
+        if (uses_gerya_water_fugacity()
+            && out.template has_additional_output_object<GeryaWaterFugacity<dim>>() == false)
+          out.additional_outputs.push_back(
+            std::make_unique<GeryaWaterFugacity<dim>>(
               out.n_evaluation_points()));
       }
 
@@ -184,6 +284,17 @@ namespace aspect
             fugacity_out->fugacities[point_index] =
               compute_fugacity(in.temperature[point_index],
                                pressure_for_fugacity);
+          }
+
+        if (const std::shared_ptr<GeryaWaterFugacity<dim>> fugacity_out =
+              out.template get_additional_output_object<GeryaWaterFugacity<dim>>())
+          {
+            const double adiabatic_pressure =
+              this->get_adiabatic_conditions().pressure(in.position[point_index]);
+
+            fugacity_out->fugacities[point_index] =
+              compute_tabulated_fugacity(in.temperature[point_index],
+                                         adiabatic_pressure);
           }
       }
 
@@ -352,8 +463,8 @@ namespace aspect
                            "background material and compositional fields, for a total of N+1 "
                            "where N is the number of all compositional fields or only those "
                            "corresponding to chemical compositions. This is only applied when using the "
-                           "Viscosity prefactor scheme 'HK04 olivine hydration' or "
-                           "'peng_robinson76_fugacity'. Note, the water fugacity exponent "
+                           "Viscosity prefactor scheme 'HK04 olivine hydration',  "
+                           "'peng_robinson76_fugacity' or 'water_fugacity_gerya'. Note, the water fugacity exponent "
                            "required by ASPECT for diffusion creep is r/n, where n is the stress exponent "
                            "for diffusion creep, which typically is 1. Units: none.");
 
@@ -363,8 +474,8 @@ namespace aspect
                            "background material and compositional fields, for a total of N+1 "
                            "where N is the number of all compositional fields or only those "
                            "corresponding to chemical compositions. This is only applied when using the "
-                           "Viscosity prefactor scheme 'HK04 olivine hydration' or "
-                           "'peng_robinson76_fugacity'. Note, the water fugacity exponent "
+                           "Viscosity prefactor scheme 'HK04 olivine hydration', "
+                           "'peng_robinson76_fugacity' or 'water_fugacity_gerya'. Note, the water fugacity exponent "
                            "required by ASPECT for dislocation creep is r/n, where n is the stress exponent "
                            "for dislocation creep, which typically is 3.5. Units: none.");
 
@@ -388,10 +499,10 @@ namespace aspect
                            "'Interface weakening'. Units: none.");
 
         prm.declare_entry ("Viscosity prefactor scheme", "none",
-                           Patterns::Selection("none|HK04 olivine hydration|peng_robinson76_fugacity|interface weakening"),
+                           Patterns::Selection("none|HK04 olivine hydration|peng_robinson76_fugacity|water_fugacity_gerya|interface weakening"),
                            "Select what type of viscosity multiplicative prefactor scheme to apply. "
                            "Allowed entries are 'none', 'HK04 olivine hydration', "
-                           "'peng_robinson76_fugacity', and 'interface weakening'. "
+                           "'peng_robinson76_fugacity', 'water_fugacity_gerya', and 'interface weakening'. "
                            "'HK04 olivine hydration' calculates the viscosity change due to "
                            "hydrogen incorporation into olivine following Hirth & Kohlstedt "
                            "2004 (10.1029/138GM06). 'peng_robinson76_fugacity' estimates "
@@ -400,7 +511,10 @@ namespace aspect
                            "applies the configured fugacity exponents to the viscosity. "
                            "'interface weakening' reduces the viscous contribution by a "
                            "constant amount to mimic a thin, weak interface between two "
-                           "compositional fields. 'none' does not modify the viscosity. "
+                           "compositional fields. 'water_fugacity_gerya' reads water fugacity "
+                           "as a function of temperature and adiabatic pressure from a structured data table, "
+                           "bilinearly interpolates the table in memory, and applies the "
+                           "configured fugacity exponents to the viscosity. 'none' does not modify the viscosity. "
                            "Units: none.");
 
         prm.declare_entry ("Critical temperature", "647.3",
@@ -433,6 +547,19 @@ namespace aspect
                            "not constrained at higher pressures. This parameter is "
                            "only used with the 'peng_robinson76_fugacity' viscosity "
                            "prefactor scheme. Units: Pa.");
+        prm.declare_entry ("Fugacity table data directory", "./",
+                           Patterns::DirectoryName (),
+                           "Directory containing the water-fugacity table. Relative "
+                           "paths are resolved relative to the directory from which "
+                           "ASPECT is launched. This parameter is only used with the "
+                           "'water_fugacity_gerya' viscosity prefactor scheme.");
+        prm.declare_entry ("Fugacity table file name", "",
+                           Patterns::FileName (),
+                           "File containing the structured water-fugacity table. "
+                           "Coordinate 0 must be temperature in K, coordinate 1 must "
+                           "be pressure in Pa, and data component 0 must be fugacity "
+                           "in Pa. This parameter is only used with the "
+                           "'water_fugacity_gerya' viscosity prefactor scheme.");
       }
 
 
@@ -505,6 +632,55 @@ namespace aspect
             dislocation_water_fugacity_exponents =
               Utilities::MapParsing::parse_map_to_double_array(
                 prm.get("Water fugacity exponents for dislocation creep"), options);
+          }
+        if (prm.get ("Viscosity prefactor scheme") == "water_fugacity_gerya")
+          {
+            viscosity_prefactor_scheme = water_fugacity_gerya;
+
+            fugacity_table_data_directory =
+              Utilities::expand_ASPECT_SOURCE_DIR(
+                prm.get ("Fugacity table data directory"));
+
+            fugacity_table_file_name =
+              prm.get ("Fugacity table file name");
+
+            AssertThrow(
+              !fugacity_table_data_directory.empty(),
+              ExcMessage(
+                "The parameter 'Fugacity table data directory' must not be empty "
+                "when using the 'water_fugacity_gerya' viscosity prefactor scheme."));
+
+            AssertThrow(
+              !fugacity_table_file_name.empty(),
+              ExcMessage(
+                "The parameter 'Fugacity table file name' must not be empty "
+                "when using the 'water_fugacity_gerya' viscosity prefactor scheme."));
+
+            if (fugacity_table_data_directory.back() != '/')
+              fugacity_table_data_directory.push_back('/');
+
+            load_water_fugacity_table();
+            std::vector<std::string> compositional_field_names =
+              this->introspection().get_composition_names();
+            std::vector<std::string> chemical_field_names =
+              this->introspection().chemical_composition_field_names();
+
+            compositional_field_names.insert(compositional_field_names.begin(), "background");
+            chemical_field_names.insert(chemical_field_names.begin(), "background");
+
+            Utilities::MapParsing::Options options(
+              chemical_field_names,
+              "Water fugacity exponents for diffusion creep");
+            options.list_of_allowed_keys = compositional_field_names;
+            diffusion_water_fugacity_exponents =
+              Utilities::MapParsing::parse_map_to_double_array(
+                prm.get("Water fugacity exponents for diffusion creep"), options);
+
+            options.property_name = "Water fugacity exponents for dislocation creep";
+            dislocation_water_fugacity_exponents =
+              Utilities::MapParsing::parse_map_to_double_array(
+                prm.get("Water fugacity exponents for dislocation creep"), options);
+
           }
         if (prm.get ("Viscosity prefactor scheme") == "interface weakening")
           {

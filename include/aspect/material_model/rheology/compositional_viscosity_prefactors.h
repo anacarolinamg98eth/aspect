@@ -24,6 +24,7 @@
 #include <aspect/global.h>
 #include <aspect/material_model/interface.h>
 #include <aspect/simulator_access.h>
+#include <aspect/structured_data.h>
 
 namespace aspect
 {
@@ -57,6 +58,12 @@ namespace aspect
            */
           void
           parse_parameters (ParameterHandler &prm);
+
+          /**
+           * Load the tabulated fugacity data once, after parsing parameters.
+           */
+          void
+          load_water_fugacity_table ();
 
           // The flow laws that can be
           // currently modified.
@@ -103,6 +110,9 @@ namespace aspect
            */
           bool
           uses_peng_robinson_fugacity () const;
+
+          bool
+          uses_gerya_water_fugacity () const;
 
           /**
            * Create the named Peng-Robinson fugacity output when the
@@ -155,6 +165,7 @@ namespace aspect
             none,
             hk04_olivine_hydration,
             peng_robinson76_fugacity,
+            water_fugacity_gerya,
             interface_weakening,
           };
           /**
@@ -224,6 +235,33 @@ namespace aspect
            * Pressures above this value are set to the cutoff.
            */
           double pressure_cutoff;
+
+          /**
+           * Directory containing the Gerya fugacity table.
+           */
+          std::string fugacity_table_data_directory;
+
+          /**
+           * Name of the Gerya fugacity table.
+           */
+          std::string fugacity_table_file_name;
+
+          /**
+           * Interpolate water fugacity from the loaded Gerya table.
+           */
+          double
+          compute_tabulated_fugacity (const double temperature,
+                                      const double pressure) const;
+
+          /**
+           * Temperature-pressure fugacity table held in memory.
+           *
+           * Coordinate 0 is temperature in K.
+           * Coordinate 1 is pressure in Pa.
+           * Data component 0 is fugacity in Pa.
+           */
+          std::unique_ptr<Utilities::StructuredDataLookup<2>>
+            water_fugacity_lookup;
 
       };
     }
