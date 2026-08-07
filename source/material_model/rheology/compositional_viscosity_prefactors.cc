@@ -39,6 +39,13 @@ namespace aspect
   {
     namespace Rheology
     {
+      namespace
+      {
+        constexpr double maximum_gerya_water_fugacity_depth = 200e3;
+      }
+
+
+
       template <int dim>
       CompositionalViscosityPrefactors<dim>::CompositionalViscosityPrefactors ()
         = default;
@@ -128,6 +135,17 @@ namespace aspect
 
             case water_fugacity_gerya:
             {
+              // The tabulated fugacity correction is only applied in the
+              // upper 200 km. Below this depth, leave the viscosity unchanged
+              // and avoid accessing a table that is not intended to cover the
+              // deeper mantle.
+              if (this->get_geometry_model().depth(in.position[q])
+                  > maximum_gerya_water_fugacity_depth)
+                {
+                  factored_viscosities = base_viscosity;
+                  break;
+                }
+
               const double pressure_for_fugacity =
                 this->get_adiabatic_conditions().pressure(in.position[q]);
 
@@ -289,12 +307,18 @@ namespace aspect
         if (const std::shared_ptr<GeryaWaterFugacity<dim>> fugacity_out =
               out.template get_additional_output_object<GeryaWaterFugacity<dim>>())
           {
-            const double adiabatic_pressure =
-              this->get_adiabatic_conditions().pressure(in.position[point_index]);
+            if (this->get_geometry_model().depth(in.position[point_index])
+                > maximum_gerya_water_fugacity_depth)
+              fugacity_out->fugacities[point_index] = 1.0;
+            else
+              {
+                const double adiabatic_pressure =
+                  this->get_adiabatic_conditions().pressure(in.position[point_index]);
 
-            fugacity_out->fugacities[point_index] =
-              compute_tabulated_fugacity(in.temperature[point_index],
-                                         adiabatic_pressure);
+                fugacity_out->fugacities[point_index] =
+                  compute_tabulated_fugacity(in.temperature[point_index],
+                                             adiabatic_pressure);
+              }
           }
       }
 
