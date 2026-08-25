@@ -139,12 +139,12 @@ namespace aspect
               // upper 200 km. Below this depth, leave the viscosity unchanged
               // and avoid accessing a table that is not intended to cover the
               // deeper mantle.
-              if (this->get_geometry_model().depth(in.position[q])
-                  > maximum_gerya_water_fugacity_depth)
-                {
-                  factored_viscosities = base_viscosity;
-                  break;
-                }
+              // if (this->get_geometry_model().depth(in.position[q])
+              //     > maximum_gerya_water_fugacity_depth)
+              //   {
+              //     factored_viscosities = base_viscosity;
+              //     break;
+              //   }
 
               const double pressure_for_fugacity =
                 this->get_adiabatic_conditions().pressure(in.position[q]);
