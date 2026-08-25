@@ -447,7 +447,10 @@ namespace aspect
                     ExcMessage("The Peng-Robinson equation produced a "
                                "non-finite fugacity."));
 
-        return equilibrium_fugacity;
+        // Do not allow the calculated fugacity to exceed the pressure, in
+        // agreement with the cap applied when generating the Gerya lookup
+        // table. Both quantities are expressed in Pa here.
+        return std::min(equilibrium_fugacity, pressure);
       }
 
 
