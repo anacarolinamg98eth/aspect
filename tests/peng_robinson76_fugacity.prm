@@ -6,8 +6,7 @@
 #
 # The Peng-Robinson equation of state is configured with water's critical
 # properties and evaluates fugacity from the local temperature and adiabatic
-# pressure, with the EOS pressure limited to 2.5 GPa because its behavior is
-# unconstrained above that pressure. The crust dislocation-creep viscosity is
+# pressure. The crust dislocation-creep viscosity is
 # multiplied by f^(-r/n), with r/n=0.25, while the background exponent is
 # zero. The Peng-Robinson viscosity modifier assumes the material is in equilibrium
 # with a pure fluid or vapor phase.
@@ -118,7 +117,6 @@ subsection Material model
     set Critical temperature = 647.3
     set Critical pressure    = 22.12e6
     set Acentric factor      = 0.344
-    set Pressure cutoff      = 2.5e9
   end
 end
 

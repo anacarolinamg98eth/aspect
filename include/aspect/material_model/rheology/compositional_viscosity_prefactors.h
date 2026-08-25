@@ -97,8 +97,7 @@ namespace aspect
            * absolute @p pressure in Pa.
            * The calculation is independent of composition: at a given
            * temperature and pressure, every composition has the same fugacity.
-           * The returned fugacity is in Pa. An exception is raised if the pressure
-           * exceeds the equation of state limit of 2.5 GPa.
+           * The returned fugacity is in Pa.
            * Fluid-saturated conditions are assumed.
            */
           double
@@ -229,12 +228,6 @@ namespace aspect
            * (1976, 10.1021/i160057a011).
            */
           double acentric_factor;
-
-          /**
-           * Maximum pressure in Pa used in the Peng-Robinson fugacity calculation.
-           * Pressures above this value are set to the cutoff.
-           */
-          double pressure_cutoff;
 
           /**
            * Directory containing the Gerya fugacity table.
